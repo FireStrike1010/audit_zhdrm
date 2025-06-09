@@ -209,11 +209,17 @@ class Audit(Document):
                     leader_username = "Deleted user"
                 else:
                     leader_username = leader_username.username
+                facility_short_name = await audit.facility.fetch()
+                if not isinstance(facility_short_name, Facility):
+                    facility_short_name = "Deleted facility"
+                else:
+                    facility_short_name = facility_short_name.short_name
                 if len(permissions) == 0 and leader_username != user.username:
                     continue
                 audit = QuickAuditResponse(
                     id=audit.id,
                     name=audit.name,
+                    facility=facility_short_name,
                     start_datetime=audit.start_datetime,
                     end_datetime=audit.end_datetime,
                     is_active=audit.is_active,
