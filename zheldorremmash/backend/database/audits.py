@@ -52,7 +52,7 @@ class Audit(Document):
             if audit.is_active != should_be_active:
                 audit.is_active = should_be_active
                 await audit.save_changes()
-                print(f"Audit {audit.id} status updated to {should_be_active}")
+                print(f"Audit {audit.id} activity status updated to {should_be_active}")
 
     async def _validate_participant(self, user: User) -> Dict[str, List[str]]:
         data: Dict[str, List[str]] = dict()
@@ -64,6 +64,7 @@ class Audit(Document):
             found_categories = []
             for category, user_links in values.items():
                 users = await asyncio.gather(*[link.fetch() for link in user_links])
+                users = [user for user in users if isinstance(user, User)]
                 users_full_names = [f"{u.surname} {u.name} {u.patronymic if u.patronymic else ''}".rstrip() for u in users]
                 users = [u.username for u in users]
                 self._fetched_auditors_full_names[part_name][category] = users_full_names
@@ -183,10 +184,15 @@ class Audit(Document):
         filtered_audits = []
         if user.role == 'Admin':
             for audit in audits:
+                facility_short_name = await audit.facility.fetch()
+                if not isinstance(facility_short_name, Facility):
+                    facility_short_name = "Deleted facility"
+                else:
+                    facility_short_name = facility_short_name.short_name
                 audit = QuickAuditResponse(
                     id=audit.id,
                     name=audit.name,
-                    facility=(await audit.facility.fetch()).short_name,
+                    facility=facility_short_name,
                     start_datetime=audit.start_datetime,
                     end_datetime=audit.end_datetime,
                     is_active=audit.is_active,
@@ -198,7 +204,12 @@ class Audit(Document):
         else:
             for audit in audits:
                 permissions = await audit._validate_participant(user)
-                if len(permissions) == 0 and (await audit.audit_leader.fetch()).username != user.username:
+                leader_username = await audit.audit_leader.fetch()
+                if not isinstance(leader_username, User):
+                    leader_username = "Deleted user"
+                else:
+                    leader_username = leader_username.username
+                if len(permissions) == 0 and leader_username != user.username:
                     continue
                 audit = QuickAuditResponse(
                     id=audit.id,
@@ -207,7 +218,7 @@ class Audit(Document):
                     end_datetime=audit.end_datetime,
                     is_active=audit.is_active,
                     created_at=audit.created_at,
-                    change_activity=(True if ((await audit.audit_leader.fetch()).username == user.username and audit.activation == 'on_demand') else False),
+                    change_activity=(True if leader_username == user.username and audit.activation == 'on_demand' else False),
                     results_access=audit.results_access,
                     my_permissions=permissions
                 )
@@ -215,7 +226,12 @@ class Audit(Document):
         return filtered_audits
     
     async def change_activity(self, user: User, data: bool) -> None | NoReturn:
-        if user.role == 'Admin' or user.username == (await self.audit_leader.fetch()).username:
+        leader_username = await self.audit_leader.fetch()
+        if not isinstance(leader_username, User):
+            leader_username = "Deleted user"
+        else:
+            leader_username = leader_username.username
+        if user.role == 'Admin' or user.username == leader_username:
             if self.activation == 'by_datetime':
                 raise ValueError('Activation of this audit meant to be "by_datetime", so it cant be activated/deactivated by leader')
             self.is_active = data
