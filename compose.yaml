@@ -1,0 +1,45 @@
+services:
+  backend:
+    build: /zheldorremmash/
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_HOST=mongodb
+      - MONGO_PORT=27017
+      - AUTH_SOURCE=admin
+      - MONGO_DBNAME=audits
+      - MASTER_KEY=${MASTER_KEY}
+      - PYTHONUNBUFFERED=1
+      - TZ=${TZ}
+    ports:
+      - '8000:8000'
+    depends_on:
+      - mongodb
+  mongodb:
+    image: mongo:8.0.6
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - TZ=${TZ}
+    command: mongod --bind_ip_all --tlsMode disabled
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb_data:/data/db
+  nginx:
+    image: nginx:alpine
+    environment:
+      - TZ=${TZ}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./certificates:/etc/nginx/certs
+      - ./build:/usr/share/nginx/html 
+    depends_on:
+      - backend
+    restart: unless-stopped
+volumes:
+  mongodb_data:
+
